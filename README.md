@@ -9,8 +9,11 @@ Wrtn already supports the required formats:
 - Claude Code: Anthropic Messages API
 
 The proxy only rewrites paths, normalizes authentication to `X-API-Key`,
-passes request fields and beta headers through, and relays SSE without
-buffering.
+and passes request fields and beta headers through. Wrtn's Responses stream
+does not terminate reliably, and its Messages stream omits lifecycle events
+that Claude Code expects. The proxy therefore requests non-streaming results
+and emits standards-shaped SSE event sequences for both clients after each
+upstream response completes.
 
 ## Routes
 
@@ -36,7 +39,8 @@ when it is unavailable.
 npm install
 npm run build
 
-export WRTN_API_KEY="your-wrtn-api-key"
+cp .env.example .env
+# Edit .env and set WRTN_API_KEY.
 npm start
 ```
 
@@ -49,10 +53,11 @@ variables:
 | `WRTN_BASE_URL` | `https://api.wrtn.ax/api/v1` | Wrtn API base URL |
 | `HOST` | `127.0.0.1` | Proxy bind host |
 | `PORT` | `8787` | Proxy bind port |
+| `WRTN_MESSAGES_MAX_TOKENS` | `16384` | Caps Claude Code output tokens to Wrtn's reliable limit |
 | `CLIENT_API_KEY` | `WRTN_API_KEY` | Optional separate client-to-proxy key |
 
 The server refuses a non-loopback bind unless `CLIENT_API_KEY` is explicitly
-set.
+set. Values already exported by the shell take precedence over `.env`.
 
 ## Codex CLI
 
@@ -87,6 +92,8 @@ Check `/status` inside Claude Code. It should show:
 
 The model aliases in `config/claude-code.env.sh` are explicit Wrtn-supported
 IDs. Adjust them if your account should use different models.
+Claude Code's requested output limit is set to `16384`, matching the reliable
+Wrtn limit enforced by the proxy.
 
 ## Smoke checks
 
@@ -125,7 +132,13 @@ curl http://127.0.0.1:8787/v1/messages \
 - Client `Authorization` and `X-API-Key` headers are consumed locally.
 - Only the configured Wrtn key is sent upstream as `X-API-Key`.
 - The default listener is loopback-only.
-- Wrtn error bodies and SSE events are forwarded without schema rewriting.
+- Wrtn error bodies are forwarded without logging their request bodies.
+- Codex Responses and Claude Messages requests use buffered upstream
+  generation with synthesized SSE completion events. This preserves client
+  compatibility but not token-by-token latency.
+- When Wrtn rejects a very large Codex request with `413`, the proxy retries
+  after compacting tool descriptions and, if necessary, omitting namespace
+  tools supplied by connected apps. Core Codex coding tools remain available.
 
 ## Known compatibility boundary
 
@@ -134,3 +147,8 @@ Wrtn itself does not support. Future Codex or Claude Code releases may add
 request fields or beta capabilities. The proxy passes those fields and
 `anthropic-*` headers through unchanged, but the upstream Router ultimately
 decides whether to accept them.
+
+Codex installations with many connected apps can exceed Wrtn's request-size
+limit. In that case, the automatic fallback removes those namespace tools for
+the affected turn. Start Codex with only the connector needed for a task when
+that connector must be callable through Wrtn.

@@ -9,6 +9,7 @@ export ANTHROPIC_MODEL="claude-sonnet-4-6"
 export ANTHROPIC_DEFAULT_SONNET_MODEL="claude-sonnet-4-6"
 export ANTHROPIC_DEFAULT_OPUS_MODEL="claude-opus-4-6"
 export ANTHROPIC_DEFAULT_HAIKU_MODEL="claude-haiku-4-5-20251001"
+export CLAUDE_CODE_MAX_OUTPUT_TOKENS="16384"
 
 # Optional model picker discovery through this proxy.
 export CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY="1"
