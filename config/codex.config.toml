@@ -1,0 +1,12 @@
+# Merge this into ~/.codex/config.toml.
+# Provider settings are ignored in project-local .codex/config.toml.
+
+[model_providers.wrtn_proxy]
+name = "Wrtn Router via local proxy"
+base_url = "http://127.0.0.1:8787/v1"
+env_key = "WRTN_API_KEY"
+wire_api = "responses"
+
+[profiles.wrtn]
+model = "gpt-5"
+model_provider = "wrtn_proxy"
