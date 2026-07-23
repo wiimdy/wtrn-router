@@ -1,6 +1,28 @@
 #!/usr/bin/env bash
 
-# Source this file after exporting WRTN_API_KEY.
+# Load the project .env automatically when the caller has not exported a key.
+if [[ -z "${WRTN_API_KEY:-}" && -z "${CLIENT_API_KEY:-}" ]]; then
+  if [[ -n "${ZSH_VERSION:-}" ]]; then
+    wrtn_config_path="${(%):-%N}"
+  else
+    wrtn_config_path="${BASH_SOURCE[0]}"
+  fi
+
+  wrtn_router_root="$(cd -- "$(dirname -- "${wrtn_config_path}")/.." && pwd)"
+  if [[ -f "${wrtn_router_root}/.env" ]]; then
+    set -a
+    source "${wrtn_router_root}/.env"
+    set +a
+  fi
+
+  unset wrtn_config_path wrtn_router_root
+fi
+
+if [[ -z "${WRTN_API_KEY:-}" && -z "${CLIENT_API_KEY:-}" ]]; then
+  echo "WRTN_API_KEY or CLIENT_API_KEY must be set" >&2
+  return 1
+fi
+
 export ANTHROPIC_BASE_URL="http://127.0.0.1:8787"
 export ANTHROPIC_API_KEY="${CLIENT_API_KEY:-${WRTN_API_KEY}}"
 

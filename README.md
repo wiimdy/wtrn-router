@@ -80,10 +80,12 @@ block to `"CLIENT_API_KEY"` and export that variable before starting Codex.
 Source the supplied environment configuration:
 
 ```bash
-export WRTN_API_KEY="your-wrtn-api-key"
 source config/claude-code.env.sh
 claude
 ```
+
+The script loads the project `.env` automatically when neither
+`WRTN_API_KEY` nor `CLIENT_API_KEY` is already exported.
 
 Check `/status` inside Claude Code. It should show:
 
