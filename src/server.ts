@@ -385,6 +385,88 @@ const removeDescriptions = (value: unknown): unknown => {
   );
 };
 
+const messageContentText = (value: unknown): string => {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (isRecord(item) && typeof item.text === 'string') {
+          return item.text;
+        }
+
+        return stringifyValue(item);
+      })
+      .join('\n');
+  }
+
+  return stringifyValue(value);
+};
+
+const flattenMessageToolRoundtrip = (messages: unknown): unknown => {
+  if (!Array.isArray(messages)) {
+    return messages;
+  }
+
+  const toolNames = new Map<string, string>();
+
+  return messages.map((rawMessage) => {
+    if (!isRecord(rawMessage) || !Array.isArray(rawMessage.content)) {
+      return rawMessage;
+    }
+
+    const role = rawMessage.role;
+    const content = rawMessage.content.map((rawBlock) => {
+      if (!isRecord(rawBlock)) {
+        return rawBlock;
+      }
+
+      if (role === 'assistant' && rawBlock.type === 'tool_use') {
+        const callId =
+          typeof rawBlock.id === 'string' ? rawBlock.id : 'unknown';
+        const toolName =
+          typeof rawBlock.name === 'string' ? rawBlock.name : 'unknown';
+        toolNames.set(callId, toolName);
+
+        return {
+          type: 'text',
+          text:
+            `[Previous assistant tool request]\n` +
+            `tool: ${toolName}\n` +
+            `arguments: ${stringifyValue(rawBlock.input ?? {})}\n` +
+            `call_id: ${callId}`,
+        };
+      }
+
+      if (role === 'user' && rawBlock.type === 'tool_result') {
+        const callId =
+          typeof rawBlock.tool_use_id === 'string'
+            ? rawBlock.tool_use_id
+            : 'unknown';
+        const toolName = toolNames.get(callId) ?? 'unknown';
+        const errorLabel = rawBlock.is_error === true ? '\nstatus: error' : '';
+
+        return {
+          type: 'text',
+          text:
+            `[Tool execution result]\n` +
+            `tool: ${toolName}\n` +
+            `call_id: ${callId}${errorLabel}\n` +
+            `output:\n${messageContentText(rawBlock.content ?? '')}\n\n` +
+            `Continue the original task using this tool result. ` +
+            `Do not repeat the same tool call unless it is actually necessary.`,
+        };
+      }
+
+      return rawBlock;
+    });
+
+    return { ...rawMessage, content };
+  });
+};
+
 const responseRequestCandidates = (
   payload: ResponsesRequestPayload,
 ): ResponsesRequestPayload[] => {
@@ -418,6 +500,7 @@ const messageRequestCandidates = (
   const prepared: Record<string, unknown> = {
     ...payload,
     max_tokens: Math.min(requestedMaxTokens, messagesMaxTokens),
+    messages: flattenMessageToolRoundtrip(payload.messages),
     stream: false,
   };
 

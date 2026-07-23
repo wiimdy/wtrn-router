@@ -144,6 +144,11 @@ curl http://127.0.0.1:8787/v1/messages \
   after compacting tool descriptions and, if necessary, omitting namespace
   tools supplied by connected apps. The same fallback compacts Claude Code
   tool descriptions and can omit extension tools as a final retry.
+- Wrtn currently returns `502` when a Messages request includes completed
+  Anthropic `tool_use` and `tool_result` blocks. The proxy keeps new tool calls
+  native, but converts completed tool-call history to text before forwarding
+  follow-up turns. Claude Code can therefore execute tools and continue the
+  same turn normally.
 
 ## Known compatibility boundary
 

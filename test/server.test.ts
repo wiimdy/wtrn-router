@@ -319,6 +319,61 @@ test('rewrites the Messages path while preserving query and beta headers', async
   assert.equal(payload.upstreamApiKey, 'wrtn-secret');
 });
 
+test('flattens completed Claude tool calls for Wrtn follow-up requests', async () => {
+  const response = await fetch(`${proxyOrigin}/v1/messages`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': 'client-secret',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1_024,
+      messages: [
+        { role: 'user', content: 'Load the requested skill.' },
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_123',
+              name: 'Skill',
+              input: { skill: 'find-skills' },
+            },
+          ],
+        },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'toolu_123',
+              content: [
+                { type: 'text', text: 'Launching skill: find-skills' },
+              ],
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  const payload = (await response.json()) as {
+    body: { messages: Array<{ content: Array<Record<string, unknown>> }> };
+  };
+  const assistantText = payload.body.messages[1]?.content[0]?.text;
+  const resultText = payload.body.messages[2]?.content[0]?.text;
+  assert(typeof assistantText === 'string');
+  assert.match(assistantText, /tool: Skill/);
+  assert.match(assistantText, /"skill":"find-skills"/);
+  assert(typeof resultText === 'string');
+  assert.match(resultText, /tool: Skill/);
+  assert.match(resultText, /Launching skill: find-skills/);
+  assert.doesNotMatch(JSON.stringify(payload.body.messages), /"tool_use"/);
+  assert.doesNotMatch(JSON.stringify(payload.body.messages), /"tool_result"/);
+});
+
 test('adapts buffered Wrtn Messages output into Claude SSE events', async () => {
   const response = await fetch(`${proxyOrigin}/v1/messages?beta=true`, {
     method: 'POST',
