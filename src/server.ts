@@ -407,6 +407,31 @@ const responseRequestCandidates = (
   return [prepared, withoutDescriptions, withoutNamespaces];
 };
 
+const messageRequestCandidates = (
+  payload: Record<string, unknown>,
+  messagesMaxTokens: number,
+): Record<string, unknown>[] => {
+  const requestedMaxTokens =
+    typeof payload.max_tokens === 'number'
+      ? payload.max_tokens
+      : messagesMaxTokens;
+  const prepared: Record<string, unknown> = {
+    ...payload,
+    max_tokens: Math.min(requestedMaxTokens, messagesMaxTokens),
+    stream: false,
+  };
+
+  if (!Array.isArray(prepared.tools)) {
+    return [prepared];
+  }
+
+  return [
+    prepared,
+    { ...prepared, tools: removeDescriptions(prepared.tools) },
+    { ...prepared, tools: [] },
+  ];
+};
+
 const writeResponsesEvent = (
   response: ServerResponse,
   type: string,
@@ -774,7 +799,9 @@ export const createProxyServer = (
       let upstreamBody = body;
       let adaptResponsesStream = false;
       let adaptMessagesStream = false;
-      let responsesPayloadCandidates: ResponsesRequestPayload[] | undefined;
+      let compatibilityPayloadCandidates:
+        | Record<string, unknown>[]
+        | undefined;
 
       if (
         requestUrl.pathname === '/v1/responses' &&
@@ -785,9 +812,10 @@ export const createProxyServer = (
           const payload = JSON.parse(body.toString('utf8')) as unknown;
           if (isRecord(payload)) {
             adaptResponsesStream = payload.stream === true;
-            responsesPayloadCandidates = responseRequestCandidates(payload);
+            compatibilityPayloadCandidates =
+              responseRequestCandidates(payload);
             upstreamBody = Buffer.from(
-              JSON.stringify(responsesPayloadCandidates[0]),
+              JSON.stringify(compatibilityPayloadCandidates[0]),
             );
           }
         } catch {
@@ -805,16 +833,12 @@ export const createProxyServer = (
           const payload = JSON.parse(body.toString('utf8')) as unknown;
           if (isRecord(payload)) {
             adaptMessagesStream = payload.stream === true;
-            const requestedMaxTokens =
-              typeof payload.max_tokens === 'number'
-                ? payload.max_tokens
-                : messagesMaxTokens;
+            compatibilityPayloadCandidates = messageRequestCandidates(
+              payload,
+              messagesMaxTokens,
+            );
             upstreamBody = Buffer.from(
-              JSON.stringify({
-                ...payload,
-                max_tokens: Math.min(requestedMaxTokens, messagesMaxTokens),
-                stream: adaptMessagesStream ? false : payload.stream,
-              }),
+              JSON.stringify(compatibilityPayloadCandidates[0]),
             );
           }
         } catch {
@@ -841,16 +865,16 @@ export const createProxyServer = (
 
       if (
         upstreamResponse.status === 413 &&
-        responsesPayloadCandidates !== undefined
+        compatibilityPayloadCandidates !== undefined
       ) {
         for (
           let candidateIndex = 1;
-          candidateIndex < responsesPayloadCandidates.length;
+          candidateIndex < compatibilityPayloadCandidates.length;
           candidateIndex += 1
         ) {
-          const candidate = responsesPayloadCandidates[candidateIndex];
+          const candidate = compatibilityPayloadCandidates[candidateIndex];
           console.warn(
-            `Wrtn rejected Responses request size; retrying compatibility payload ${candidateIndex + 1}/${responsesPayloadCandidates.length}`,
+            `Wrtn rejected request size; retrying compatibility payload ${candidateIndex + 1}/${compatibilityPayloadCandidates.length}`,
           );
           const candidateBytes = Buffer.from(JSON.stringify(candidate));
           const candidateBody = new Uint8Array(candidateBytes.length);

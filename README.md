@@ -85,7 +85,9 @@ claude
 ```
 
 The script loads the project `.env` automatically when neither
-`WRTN_API_KEY` nor `CLIENT_API_KEY` is already exported.
+`WRTN_API_KEY` nor `CLIENT_API_KEY` is already exported. It sets both
+`ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN` so an existing Claude OAuth
+login does not override the local gateway credential.
 
 Check `/status` inside Claude Code. It should show:
 
@@ -140,7 +142,8 @@ curl http://127.0.0.1:8787/v1/messages \
   compatibility but not token-by-token latency.
 - When Wrtn rejects a very large Codex request with `413`, the proxy retries
   after compacting tool descriptions and, if necessary, omitting namespace
-  tools supplied by connected apps. Core Codex coding tools remain available.
+  tools supplied by connected apps. The same fallback compacts Claude Code
+  tool descriptions and can omit extension tools as a final retry.
 
 ## Known compatibility boundary
 

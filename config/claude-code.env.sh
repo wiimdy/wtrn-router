@@ -25,6 +25,7 @@ fi
 
 export ANTHROPIC_BASE_URL="http://127.0.0.1:8787"
 export ANTHROPIC_API_KEY="${CLIENT_API_KEY:-${WRTN_API_KEY}}"
+export ANTHROPIC_AUTH_TOKEN="${ANTHROPIC_API_KEY}"
 
 # Pin Wrtn-supported model IDs for Claude Code's model roles.
 export ANTHROPIC_MODEL="claude-sonnet-4-6"

@@ -99,6 +99,23 @@ const upstreamServer = createServer(async (request, response) => {
     Array.isArray(parsedBody.messages) &&
     parsedBody.messages[0]?.content === 'stream-test'
   ) {
+    const tools: unknown[] =
+      'tools' in parsedBody && Array.isArray(parsedBody.tools)
+        ? parsedBody.tools
+        : [];
+    if (
+      tools.some(
+        (tool) =>
+          typeof tool === 'object' &&
+          tool !== null &&
+          'description' in tool,
+      )
+    ) {
+      response.writeHead(413);
+      response.end(JSON.stringify({ error: 'request entity too large' }));
+      return;
+    }
+
     response.setHeader('content-type', 'application/json');
     response.end(
       JSON.stringify({
@@ -111,6 +128,7 @@ const upstreamServer = createServer(async (request, response) => {
           input_tokens: 10,
           output_tokens: 4,
           upstream_max_tokens: parsedBody.max_tokens,
+          upstream_tools_compacted: tools.length === 1,
         },
       }),
     );
@@ -313,6 +331,13 @@ test('adapts buffered Wrtn Messages output into Claude SSE events', async () => 
       max_tokens: 32_000,
       stream: true,
       messages: [{ role: 'user', content: 'stream-test' }],
+      tools: [
+        {
+          name: 'read_file',
+          description: 'Read a local file',
+          input_schema: { type: 'object' },
+        },
+      ],
     }),
   });
 
@@ -321,6 +346,7 @@ test('adapts buffered Wrtn Messages output into Claude SSE events', async () => 
   assert.match(body, /event: content_block_start/);
   assert.match(body, /"type":"text_delta","text":"OK"/);
   assert.match(body, /"upstream_max_tokens":16384/);
+  assert.match(body, /"upstream_tools_compacted":true/);
   assert.match(body, /event: message_stop/);
 });
 
