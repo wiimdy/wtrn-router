@@ -9,6 +9,34 @@ import {
 
 const DEFAULT_MAX_BODY_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MESSAGES_MAX_TOKENS = 16_384;
+const RESPONSES_COMPATIBILITY_TARGET_BYTES = 96 * 1024;
+const RESPONSES_HISTORY_TEXT_LIMIT_CHARS = 12_000;
+const RESPONSES_COMPACTION_NOTICE =
+  '[Proxy emergency history compaction]\n' +
+  'Wrtn rejected the full request as too large. Older conversation items were omitted, ' +
+  'while the most recent task context and tool results were retained. Continue the current ' +
+  'task from the recent context. Re-read workspace files when an omitted detail is needed.';
+const MINIMAL_CODEX_TOOL_NAMES = new Set([
+  'apply_patch',
+  'exec_command',
+  'update_plan',
+  'view_image',
+  'wait',
+  'write_stdin',
+]);
+const MINIMAL_CLAUDE_TOOL_NAMES = new Set([
+  'AskUserQuestion',
+  'Bash',
+  'Edit',
+  'Glob',
+  'Grep',
+  'Read',
+  'Skill',
+  'Task',
+  'TaskOutput',
+  'TodoWrite',
+  'Write',
+]);
 const HOP_BY_HOP_HEADERS = new Set([
   'connection',
   'content-length',
@@ -385,6 +413,78 @@ const removeDescriptions = (value: unknown): unknown => {
   );
 };
 
+const truncateLargeHistoryStrings = (value: unknown): unknown => {
+  if (typeof value === 'string') {
+    if (value.length <= RESPONSES_HISTORY_TEXT_LIMIT_CHARS) {
+      return value;
+    }
+
+    const retainedChars = Math.floor(
+      RESPONSES_HISTORY_TEXT_LIMIT_CHARS / 2,
+    );
+    const omittedChars = value.length - retainedChars * 2;
+    return (
+      `${value.slice(0, retainedChars)}\n` +
+      `[... ${omittedChars} characters omitted by proxy compaction ...]\n` +
+      value.slice(-retainedChars)
+    );
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(truncateLargeHistoryStrings);
+  }
+
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, child]) => [
+      key,
+      truncateLargeHistoryStrings(child),
+    ]),
+  );
+};
+
+const compactResponsesHistory = (
+  payload: ResponsesRequestPayload,
+  targetBytes: number,
+): ResponsesRequestPayload => {
+  if (!Array.isArray(payload.input)) {
+    return payload;
+  }
+
+  const notice = messageItem('user', RESPONSES_COMPACTION_NOTICE);
+  const retainedReversed: unknown[] = [];
+
+  for (let index = payload.input.length - 1; index >= 0; index -= 1) {
+    const item = truncateLargeHistoryStrings(payload.input[index]);
+    const trialInput = [notice, item, ...[...retainedReversed].reverse()];
+    const trialPayload = { ...payload, input: trialInput };
+    if (
+      Buffer.byteLength(JSON.stringify(trialPayload), 'utf8') <= targetBytes
+    ) {
+      retainedReversed.push(item);
+    }
+  }
+
+  return {
+    ...payload,
+    input: [notice, ...[...retainedReversed].reverse()],
+  };
+};
+
+const uniquePayloadCandidates = (
+  candidates: ResponsesRequestPayload[],
+): ResponsesRequestPayload[] => {
+  const uniqueCandidates = new Map<string, ResponsesRequestPayload>();
+  for (const candidate of candidates) {
+    uniqueCandidates.set(JSON.stringify(candidate), candidate);
+  }
+
+  return [...uniqueCandidates.values()];
+};
+
 const messageContentText = (value: unknown): string => {
   if (typeof value === 'string') {
     return value;
@@ -472,21 +572,53 @@ const responseRequestCandidates = (
 ): ResponsesRequestPayload[] => {
   const prepared = prepareResponsesPayload(payload);
   if (!Array.isArray(prepared.tools)) {
+    return uniquePayloadCandidates([
+      prepared,
+      compactResponsesHistory(
+        prepared,
+        RESPONSES_COMPATIBILITY_TARGET_BYTES,
+      ),
+    ]);
+  }
+
+  const compactedTools = removeDescriptions(prepared.tools);
+  if (!Array.isArray(compactedTools)) {
     return [prepared];
   }
 
   const withoutDescriptions = {
     ...prepared,
-    tools: removeDescriptions(prepared.tools),
+    tools: compactedTools,
   };
   const withoutNamespaces = {
     ...withoutDescriptions,
-    tools: prepared.tools.filter(
+    tools: compactedTools.filter(
       (tool) => !isRecord(tool) || tool.type !== 'namespace',
     ),
   };
+  const withMinimalTools = {
+    ...withoutDescriptions,
+    tools: compactedTools.filter(
+      (tool) =>
+        isRecord(tool) &&
+        typeof tool.name === 'string' &&
+        MINIMAL_CODEX_TOOL_NAMES.has(tool.name),
+    ),
+  };
 
-  return [prepared, withoutDescriptions, withoutNamespaces];
+  return uniquePayloadCandidates([
+    prepared,
+    withoutDescriptions,
+    withoutNamespaces,
+    compactResponsesHistory(
+      withoutNamespaces,
+      RESPONSES_COMPATIBILITY_TARGET_BYTES,
+    ),
+    compactResponsesHistory(
+      withMinimalTools,
+      RESPONSES_COMPATIBILITY_TARGET_BYTES,
+    ),
+  ]);
 };
 
 const messageRequestCandidates = (
@@ -508,11 +640,44 @@ const messageRequestCandidates = (
     return [prepared];
   }
 
-  return [
+  const compactedTools = removeDescriptions(prepared.tools);
+  if (!Array.isArray(compactedTools)) {
+    return [prepared];
+  }
+
+  const withoutDescriptions = { ...prepared, tools: compactedTools };
+  const withoutMcpExtensions = {
+    ...prepared,
+    tools: compactedTools.filter((tool) => {
+      if (!isRecord(tool) || typeof tool.name !== 'string') {
+        return true;
+      }
+
+      return !tool.name.startsWith('mcp__');
+    }),
+  };
+  const withMinimalTools = {
+    ...prepared,
+    tools: compactedTools.filter(
+      (tool) =>
+        isRecord(tool) &&
+        typeof tool.name === 'string' &&
+        MINIMAL_CLAUDE_TOOL_NAMES.has(tool.name),
+    ),
+  };
+
+  const candidates = [
     prepared,
-    { ...prepared, tools: removeDescriptions(prepared.tools) },
-    { ...prepared, tools: [] },
+    withoutDescriptions,
+    withoutMcpExtensions,
+    withMinimalTools,
   ];
+  const uniqueCandidates = new Map<string, Record<string, unknown>>();
+  for (const candidate of candidates) {
+    uniqueCandidates.set(JSON.stringify(candidate), candidate);
+  }
+
+  return [...uniqueCandidates.values()];
 };
 
 const writeResponsesEvent = (

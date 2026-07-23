@@ -43,6 +43,10 @@ const upstreamServer = createServer(async (request, response) => {
     request.headers['content-encoding'] === 'test-binary'
       ? body.toString('base64')
       : JSON.parse(body.toString('utf8'));
+  const serializedParsedBody = JSON.stringify(parsedBody);
+  const isHistoryCompactionTest =
+    request.url === '/api/v1/providers/responses' &&
+    serializedParsedBody.includes('LATEST_HISTORY_MARKER');
 
   if (
     request.url === '/api/v1/providers/responses' &&
@@ -50,7 +54,8 @@ const upstreamServer = createServer(async (request, response) => {
     parsedBody !== null &&
     'input' in parsedBody &&
     (parsedBody.input === 'stream-test' ||
-      parsedBody.input === 'large-tools-test')
+      parsedBody.input === 'large-tools-test' ||
+      isHistoryCompactionTest)
   ) {
     const tools: unknown[] =
       'tools' in parsedBody && Array.isArray(parsedBody.tools)
@@ -71,6 +76,15 @@ const upstreamServer = createServer(async (request, response) => {
       return;
     }
 
+    if (
+      isHistoryCompactionTest &&
+      body.length > 96 * 1024
+    ) {
+      response.writeHead(413);
+      response.end(JSON.stringify({ error: 'request entity too large' }));
+      return;
+    }
+
     response.setHeader('content-type', 'application/json');
     response.end(
       JSON.stringify({
@@ -78,6 +92,7 @@ const upstreamServer = createServer(async (request, response) => {
         status: 'completed',
         upstream_stream: parsedBody.stream,
         upstream_tools: tools,
+        upstream_input: parsedBody.input,
         output: [
           {
             type: 'message',
@@ -97,7 +112,8 @@ const upstreamServer = createServer(async (request, response) => {
     parsedBody !== null &&
     'messages' in parsedBody &&
     Array.isArray(parsedBody.messages) &&
-    parsedBody.messages[0]?.content === 'stream-test'
+    (parsedBody.messages[0]?.content === 'stream-test' ||
+      parsedBody.messages[0]?.content === 'core-tools-test')
   ) {
     const tools: unknown[] =
       'tools' in parsedBody && Array.isArray(parsedBody.tools)
@@ -109,6 +125,22 @@ const upstreamServer = createServer(async (request, response) => {
           typeof tool === 'object' &&
           tool !== null &&
           'description' in tool,
+      )
+    ) {
+      response.writeHead(413);
+      response.end(JSON.stringify({ error: 'request entity too large' }));
+      return;
+    }
+
+    if (
+      parsedBody.messages[0]?.content === 'core-tools-test' &&
+      tools.some(
+        (tool) =>
+          typeof tool === 'object' &&
+          tool !== null &&
+          'name' in tool &&
+          typeof tool.name === 'string' &&
+          tool.name.startsWith('mcp__'),
       )
     ) {
       response.writeHead(413);
@@ -129,6 +161,14 @@ const upstreamServer = createServer(async (request, response) => {
           output_tokens: 4,
           upstream_max_tokens: parsedBody.max_tokens,
           upstream_tools_compacted: tools.length === 1,
+          upstream_tool_names: tools.map((tool) =>
+            typeof tool === 'object' &&
+            tool !== null &&
+            'name' in tool &&
+            typeof tool.name === 'string'
+              ? tool.name
+              : 'unknown',
+          ),
         },
       }),
     );
@@ -297,6 +337,50 @@ test('retries oversized Codex payloads without namespace tools', async () => {
   assert.match(body, /event: response\.completed/);
 });
 
+test('compacts old Codex history after Wrtn rejects the request size', async () => {
+  const response = await fetch(`${proxyOrigin}/v1/responses`, {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer client-secret',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'claude-opus-4-8',
+      input: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'output_text',
+              text: `OLD_HISTORY_MARKER:${'x'.repeat(140_000)}`,
+            },
+          ],
+        },
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            {
+              type: 'input_text',
+              text: 'LATEST_HISTORY_MARKER: continue the current task',
+            },
+          ],
+        },
+      ],
+      stream: false,
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  const payload = (await response.json()) as Record<string, unknown>;
+  const upstreamInput = JSON.stringify(payload.upstream_input);
+  assert.match(upstreamInput, /Proxy emergency history compaction/);
+  assert.match(upstreamInput, /LATEST_HISTORY_MARKER/);
+  assert(upstreamInput.length < 96 * 1024);
+  assert.doesNotMatch(upstreamInput, /x{20_000}/);
+});
+
 test('rewrites the Messages path while preserving query and beta headers', async () => {
   const response = await fetch(`${proxyOrigin}/v1/messages?beta=true`, {
     method: 'POST',
@@ -403,6 +487,39 @@ test('adapts buffered Wrtn Messages output into Claude SSE events', async () => 
   assert.match(body, /"upstream_max_tokens":16384/);
   assert.match(body, /"upstream_tools_compacted":true/);
   assert.match(body, /event: message_stop/);
+});
+
+test('preserves Claude core tools when MCP extensions exceed Wrtn limits', async () => {
+  const response = await fetch(`${proxyOrigin}/v1/messages?beta=true`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': 'client-secret',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1_024,
+      stream: true,
+      messages: [{ role: 'user', content: 'core-tools-test' }],
+      tools: [
+        {
+          name: 'Skill',
+          description: 'Load a skill',
+          input_schema: { type: 'object' },
+        },
+        {
+          name: 'mcp__large_extension__search',
+          description: 'Search a large external connector',
+          input_schema: { type: 'object' },
+        },
+      ],
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  const body = await response.text();
+  assert.match(body, /"upstream_tool_names":\["Skill"\]/);
+  assert.doesNotMatch(body, /mcp__large_extension__search/);
 });
 
 test('translates Wrtn model support into an OpenAI-style model list', async () => {

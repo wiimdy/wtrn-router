@@ -6,7 +6,13 @@ name = "Wrtn Router via local proxy"
 base_url = "http://127.0.0.1:8787/v1"
 env_key = "WRTN_API_KEY"
 wire_api = "responses"
+requires_openai_auth = false
 
 [profiles.wrtn]
-model = "gpt-5"
+model = "claude-opus-4-8"
 model_provider = "wrtn_proxy"
+model_catalog_json = "/absolute/path/to/wrtn-router/config/codex.models.json"
+model_reasoning_effort = "max"
+model_auto_compact_token_limit = 30000
+model_auto_compact_token_limit_scope = "total"
+service_tier = "default"

@@ -72,6 +72,22 @@ export WRTN_API_KEY="your-wrtn-api-key"
 codex --profile wrtn
 ```
 
+The supplied Codex model catalog registers these Wrtn-supported coding models:
+
+- `claude-opus-4-8`
+- `claude-fable-5`
+- `claude-sonnet-5`
+- `claude-opus-4-7`
+- `claude-opus-4-6`
+- `claude-sonnet-4-6`
+- `claude-haiku-4-5-20251001`
+
+Set `model_catalog_json` to the absolute path of
+`config/codex.models.json`. This removes Codex's fallback-metadata warning,
+keeps automatic skill instructions enabled, and triggers native history
+compaction at 30,000 total tokens. Existing Codex processes must be restarted
+after changing the profile or model catalog.
+
 If `CLIENT_API_KEY` is set on the proxy, change `env_key` in the Codex provider
 block to `"CLIENT_API_KEY"` and export that variable before starting Codex.
 
@@ -141,9 +157,12 @@ curl http://127.0.0.1:8787/v1/messages \
   generation with synthesized SSE completion events. This preserves client
   compatibility but not token-by-token latency.
 - When Wrtn rejects a very large Codex request with `413`, the proxy retries
-  after compacting tool descriptions and, if necessary, omitting namespace
-  tools supplied by connected apps. The same fallback compacts Claude Code
-  tool descriptions and can omit extension tools as a final retry.
+  after compacting tool descriptions and omitting namespace tools supplied by
+  connected apps. If the request is still too large, it retains recent task
+  context, truncates oversized historical tool results, and retries with a
+  payload targeted below 96 KiB. The final fallback keeps Codex's core shell
+  and editing tools. The same fallback compacts Claude Code tool descriptions
+  and preserves its core tools while omitting MCP extensions as a final retry.
 - Wrtn currently returns `502` when a Messages request includes completed
   Anthropic `tool_use` and `tool_result` blocks. The proxy keeps new tool calls
   native, but converts completed tool-call history to text before forwarding
