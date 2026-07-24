@@ -1,183 +1,65 @@
-# Wrtn CLI Proxy
+# Wrtn Router for OpenCode
 
-A small local gateway that lets Codex CLI and Claude Code use one Wrtn Router
-API key without changing either client's wire protocol.
+OpenCode에서 Wrtn의 Claude와 GPT 모델을 사용하기 위한 로컬 프록시입니다.
 
-Wrtn already supports the required formats:
+## 빠른 시작
 
-- Codex: OpenAI Responses API
-- Claude Code: Anthropic Messages API
+요구 사항: Node.js 20 이상, OpenCode, Wrtn API 키
 
-The proxy only rewrites paths, normalizes authentication to `X-API-Key`,
-and passes request fields and beta headers through. Wrtn's Responses stream
-does not terminate reliably, and its Messages stream omits lifecycle events
-that Claude Code expects. The proxy therefore requests non-streaming results
-and emits standards-shaped SSE event sequences for both clients after each
-upstream response completes.
-
-## Routes
-
-| Client route | Wrtn Router route |
-| --- | --- |
-| `POST /v1/responses` | `POST /api/v1/providers/responses` |
-| `POST /v1/messages` | `POST /api/v1/providers/messages` |
-| `POST /v1/chat/completions` | `POST /api/v1/providers/chat/completion` |
-| `GET /v1/models` | Transformed from `GET /api/v1/models/support` |
-
-`POST /v1/messages/count_tokens` intentionally returns `404`. Anthropic
-documents this endpoint as optional; Claude Code estimates token usage locally
-when it is unavailable.
-
-## Requirements
-
-- Node.js 20 or newer
-- A Wrtn Router API key
-
-## Install and run
+### 1. 프록시 실행
 
 ```bash
-npm install
-npm run build
-
-cp .env.example .env
-# Edit .env and set WRTN_API_KEY.
+git clone git@github.com:wiimdy/wtrn-router.git
+cd wtrn-router
 npm start
 ```
 
-The default listener is `http://127.0.0.1:8787`. Supported environment
-variables:
+프록시는 `http://127.0.0.1:8788`에서 실행됩니다.
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `WRTN_API_KEY` | required | Credential sent to Wrtn Router |
-| `WRTN_BASE_URL` | `https://api.wrtn.ax/api/v1` | Wrtn API base URL |
-| `HOST` | `127.0.0.1` | Proxy bind host |
-| `PORT` | `8787` | Proxy bind port |
-| `WRTN_MESSAGES_MAX_TOKENS` | `16384` | Caps Claude Code output tokens to Wrtn's reliable limit |
-| `CLIENT_API_KEY` | `WRTN_API_KEY` | Optional separate client-to-proxy key |
+### 2. OpenCode 설정
 
-The server refuses a non-loopback bind unless `CLIENT_API_KEY` is explicitly
-set. Values already exported by the shell take precedence over `.env`.
-
-## Codex CLI
-
-Merge [`config/codex.config.toml`](config/codex.config.toml) into the
-user-level `~/.codex/config.toml`. Codex does not allow provider configuration
-from a project-local `.codex/config.toml`.
-
-With the proxy running:
+새 설정이라면:
 
 ```bash
-export WRTN_API_KEY="your-wrtn-api-key"
-codex --profile wrtn
+mkdir -p ~/.config/opencode
+cp config/opencode.jsonc ~/.config/opencode/opencode.jsonc
 ```
 
-The supplied Codex model catalog registers these Wrtn-supported coding models:
+기존 `opencode.jsonc`가 있다면 [`config/opencode.jsonc`](config/opencode.jsonc)의 `provider.wrtn-chat` 부분만 기존 설정에 추가하세요.
 
-- `claude-opus-4-8`
-- `claude-fable-5`
-- `claude-sonnet-5`
-- `claude-opus-4-7`
-- `claude-opus-4-6`
-- `claude-sonnet-4-6`
-- `claude-haiku-4-5-20251001`
+### 3. OpenCode 실행
 
-Set `model_catalog_json` to the absolute path of
-`config/codex.models.json`. This removes Codex's fallback-metadata warning,
-keeps automatic skill instructions enabled, and triggers native history
-compaction at 30,000 total tokens. Existing Codex processes must be restarted
-after changing the profile or model catalog.
-
-If `CLIENT_API_KEY` is set on the proxy, change `env_key` in the Codex provider
-block to `"CLIENT_API_KEY"` and export that variable before starting Codex.
-
-## Claude Code
-
-Source the supplied environment configuration:
+새 터미널에서:
 
 ```bash
-source config/claude-code.env.sh
-claude
+export WRTN_API_KEY='your-api-key'
+opencode
 ```
 
-The script loads the project `.env` automatically when neither
-`WRTN_API_KEY` nor `CLIENT_API_KEY` is already exported. It sets both
-`ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN` so an existing Claude OAuth
-login does not override the local gateway credential.
+OpenCode에서 `wrtn-chat/claude-opus-4-8` 또는 `wrtn-chat/gpt-5`를 선택하면 됩니다.
 
-Check `/status` inside Claude Code. It should show:
+## 등록 모델
 
-- Anthropic base URL: `http://127.0.0.1:8787`
-- API key: `ANTHROPIC_API_KEY`
+| 모델 | context | output |
+| --- | ---: | ---: |
+| `claude-opus-4-8` | 1,000,000 | 128,000 |
+| `gpt-5` | 400,000 | 128,000 |
 
-The model aliases in `config/claude-code.env.sh` are explicit Wrtn-supported
-IDs. Adjust them if your account should use different models.
-Claude Code's requested output limit is set to `16384`, matching the reliable
-Wrtn limit enforced by the proxy.
+## 백그라운드 실행
 
-## Smoke checks
-
-Health:
+저장소가 `~/wtrn-router`에 있을 때:
 
 ```bash
-curl http://127.0.0.1:8787/health
+mkdir -p ~/.config/systemd/user
+cp systemd/wrtn-opencode-proxy.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now wrtn-opencode-proxy.service
 ```
 
-Responses API:
+상태 확인:
 
 ```bash
-curl http://127.0.0.1:8787/v1/responses \
-  -H "Authorization: Bearer $WRTN_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"model":"gpt-5","input":"Say hello"}'
+curl -sS http://127.0.0.1:8788/health
 ```
 
-Messages API:
-
-```bash
-curl http://127.0.0.1:8787/v1/messages \
-  -H "X-API-Key: $WRTN_API_KEY" \
-  -H "anthropic-version: 2023-06-01" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model":"claude-sonnet-4-6",
-    "max_tokens":64,
-    "messages":[{"role":"user","content":"Say hello"}]
-  }'
-```
-
-## Security behavior
-
-- Request bodies and credentials are never logged.
-- Client `Authorization` and `X-API-Key` headers are consumed locally.
-- Only the configured Wrtn key is sent upstream as `X-API-Key`.
-- The default listener is loopback-only.
-- Wrtn error bodies are forwarded without logging their request bodies.
-- Codex Responses and Claude Messages requests use buffered upstream
-  generation with synthesized SSE completion events. This preserves client
-  compatibility but not token-by-token latency.
-- When Wrtn rejects a very large Codex request with `413`, the proxy retries
-  after compacting tool descriptions and omitting namespace tools supplied by
-  connected apps. If the request is still too large, it retains recent task
-  context, truncates oversized historical tool results, and retries with a
-  payload targeted below 96 KiB. The final fallback keeps Codex's core shell
-  and editing tools. The same fallback compacts Claude Code tool descriptions
-  and preserves its core tools while omitting MCP extensions as a final retry.
-- Wrtn currently returns `502` when a Messages request includes completed
-  Anthropic `tool_use` and `tool_result` blocks. The proxy keeps new tool calls
-  native, but converts completed tool-call history to text before forwarding
-  follow-up turns. Claude Code can therefore execute tools and continue the
-  same turn normally.
-
-## Known compatibility boundary
-
-The proxy preserves the protocols Wrtn documents; it does not emulate features
-Wrtn itself does not support. Future Codex or Claude Code releases may add
-request fields or beta capabilities. The proxy passes those fields and
-`anthropic-*` headers through unchanged, but the upstream Router ultimately
-decides whether to accept them.
-
-Codex installations with many connected apps can exceed Wrtn's request-size
-limit. In that case, the automatic fallback removes those namespace tools for
-the affected turn. Start Codex with only the connector needed for a task when
-that connector must be callable through Wrtn.
+프록시는 OpenCode의 `/v1/chat/completions` 요청을 Wrtn Chat API로 전달하며, 요청과 스트리밍 응답은 변경하지 않습니다.

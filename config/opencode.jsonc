@@ -1,0 +1,32 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "wrtn-chat": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Wrtn Router",
+      "options": {
+        "baseURL": "http://127.0.0.1:8788/v1",
+        "apiKey": "{env:WRTN_API_KEY}",
+        "headers": {
+          "X-API-Key": "{env:WRTN_API_KEY}"
+        }
+      },
+      "models": {
+        "claude-opus-4-8": {
+          "name": "Claude Opus 4.8 (Wrtn Chat)",
+          "limit": {
+            "context": 1000000,
+            "output": 128000
+          }
+        },
+        "gpt-5": {
+          "name": "GPT-5 (Wrtn)",
+          "limit": {
+            "context": 400000,
+            "output": 128000
+          }
+        }
+      }
+    }
+  }
+}
