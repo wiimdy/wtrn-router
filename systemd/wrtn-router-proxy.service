@@ -1,5 +1,5 @@
 [Unit]
-Description=Wrtn Chat proxy for OpenCode
+Description=Wrtn compatibility proxy for OpenCode and agent SDKs
 After=network-online.target
 
 [Service]
