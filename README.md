@@ -1,12 +1,8 @@
-# Wrtn Router for OpenCode
+# Wrtn Router
 
-OpenCode에서 Wrtn의 Claude와 GPT 모델을 사용하기 위한 로컬 프록시입니다.
+OpenCode, Codex SDK, Claude Agent SDK를 Wrtn API에 연결하는 로컬 프록시입니다.
 
-## 빠른 시작
-
-요구 사항: Node.js 20 이상, OpenCode, Wrtn API 키
-
-### 1. 프록시 실행
+## 1. 프록시 실행
 
 ```bash
 git clone git@github.com:wiimdy/wtrn-router.git
@@ -14,36 +10,49 @@ cd wtrn-router
 npm start
 ```
 
-프록시는 `http://127.0.0.1:8788`에서 실행됩니다.
+기본 주소는 `http://127.0.0.1:8788`입니다.
 
-### 2. OpenCode 설정
+## 2. API 키 설정
+
+프록시를 사용하는 터미널에서:
+
+```bash
+export WRTN_API_KEY='your-api-key'
+```
+
+## OpenCode
 
 새 설정이라면:
 
 ```bash
 mkdir -p ~/.config/opencode
 cp config/opencode.jsonc ~/.config/opencode/opencode.jsonc
-```
-
-기존 `opencode.jsonc`가 있다면 [`config/opencode.jsonc`](config/opencode.jsonc)의 `provider.wrtn-chat` 부분만 기존 설정에 추가하세요.
-
-### 3. OpenCode 실행
-
-새 터미널에서:
-
-```bash
-export WRTN_API_KEY='your-api-key'
 opencode
 ```
 
-OpenCode에서 `wrtn-chat/claude-opus-4-8` 또는 `wrtn-chat/gpt-5`를 선택하면 됩니다.
+기존 설정이 있다면 [`config/opencode.jsonc`](config/opencode.jsonc)의 `provider.wrtn-chat`만 추가하세요.
 
-## 등록 모델
+## Codex SDK
 
-| 모델 | context | output |
-| --- | ---: | ---: |
-| `claude-opus-4-8` | 1,000,000 | 128,000 |
-| `gpt-5` | 400,000 | 128,000 |
+```bash
+npm install @openai/codex-sdk
+node examples/codex-sdk.mjs
+```
+
+입력할 때마다 같은 Codex Thread가 자동으로 이어집니다. 프로그램을 다시 실행할 때는 출력된 ID를 `CODEX_THREAD_ID`에 넣으면 기존 Thread를 재개합니다.
+
+```bash
+CODEX_THREAD_ID='thread-id' node examples/codex-sdk.mjs
+```
+
+## Claude Agent SDK
+
+```bash
+npm install @anthropic-ai/claude-agent-sdk
+node examples/claude-agent-sdk.mjs
+```
+
+표준 입력이 Claude Agent SDK의 Streaming Input으로 전달되며, 실행 중에는 같은 세션이 자동으로 유지됩니다.
 
 ## 백그라운드 실행
 
@@ -51,9 +60,9 @@ OpenCode에서 `wrtn-chat/claude-opus-4-8` 또는 `wrtn-chat/gpt-5`를 선택하
 
 ```bash
 mkdir -p ~/.config/systemd/user
-cp systemd/wrtn-opencode-proxy.service ~/.config/systemd/user/
+cp systemd/wrtn-router-proxy.service ~/.config/systemd/user/
 systemctl --user daemon-reload
-systemctl --user enable --now wrtn-opencode-proxy.service
+systemctl --user enable --now wrtn-router-proxy.service
 ```
 
 상태 확인:
@@ -62,4 +71,8 @@ systemctl --user enable --now wrtn-opencode-proxy.service
 curl -sS http://127.0.0.1:8788/health
 ```
 
-프록시는 OpenCode의 `/v1/chat/completions` 요청을 Wrtn Chat API로 전달하며, 요청과 스트리밍 응답은 변경하지 않습니다.
+지원 경로:
+
+- `/v1/chat/completions` → Wrtn Chat API
+- `/v1/responses` → Wrtn Responses API
+- `/v1/messages` → Wrtn Messages API
