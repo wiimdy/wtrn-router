@@ -18,7 +18,8 @@
             "low": { "reasoningEffort": "low" },
             "medium": { "reasoningEffort": "medium" },
             "high": { "reasoningEffort": "high" },
-            "xhigh": { "reasoningEffort": "xhigh" }
+            "xhigh": { "reasoningEffort": "xhigh" },
+            "max": { "reasoningEffort": "max" }
           }
         },
         "claude-sonnet-4-6": {

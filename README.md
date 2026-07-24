@@ -44,9 +44,10 @@ API key: Wrtn API 키
 | `gpt-5` | GPT 주력 | 400,000 | 128,000 |
 | `gpt-4.1-mini` | 가벼운 비-Claude 대안 | 1,047,576 | 32,768 |
 
-Claude 모델은 `low`, `medium`, `high`, `xhigh`, GPT-5는 `none`부터
-`xhigh`까지 reasoning effort variant를 제공합니다. OpenCode의 variant 전환
-키 또는 `opencode run --variant high`처럼 선택할 수 있습니다.
+Claude Opus는 `low`, `medium`, `high`, `xhigh`, `max`를 제공합니다.
+Sonnet과 Haiku는 `low`부터 `xhigh`까지, GPT-5는 `none`부터 `xhigh`까지
+reasoning effort variant를 제공합니다. OpenCode의 variant 전환 키 또는
+`opencode run --variant max`처럼 선택할 수 있습니다.
 
 ## Codex SDK
 
