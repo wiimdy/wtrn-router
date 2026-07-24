@@ -34,6 +34,16 @@ API key: Wrtn API 키
 키는 권한 `600`인 OpenCode 인증 저장소에 보관됩니다. 이후 새 터미널에서도
 `WRTN_API_KEY`를 export할 필요가 없습니다.
 
+등록 모델:
+
+| 모델 | 용도 | context | output |
+| --- | --- | ---: | ---: |
+| `claude-opus-4-8` | 주력 | 1,000,000 | 128,000 |
+| `claude-sonnet-4-6` | 빠른 Opus 대안 | 1,000,000 | 128,000 |
+| `claude-haiku-4-5-20251001` | 빠르고 가벼운 작업 | 200,000 | 64,000 |
+| `gpt-5` | GPT 주력 | 400,000 | 128,000 |
+| `gpt-4.1-mini` | 가벼운 비-Claude 대안 | 1,047,576 | 32,768 |
+
 ## Codex SDK
 
 ```bash
