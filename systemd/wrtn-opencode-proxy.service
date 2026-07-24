@@ -1,0 +1,13 @@
+[Unit]
+Description=Wrtn Chat proxy for OpenCode
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/wtrn-router
+ExecStart=/usr/bin/node %h/wtrn-router/src/proxy.mjs
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
