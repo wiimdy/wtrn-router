@@ -5,11 +5,7 @@
       "npm": "@ai-sdk/openai-compatible",
       "name": "Wrtn Router",
       "options": {
-        "baseURL": "http://127.0.0.1:8788/v1",
-        "apiKey": "{env:WRTN_API_KEY}",
-        "headers": {
-          "X-API-Key": "{env:WRTN_API_KEY}"
-        }
+        "baseURL": "http://127.0.0.1:8788/v1"
       },
       "models": {
         "claude-opus-4-8": {
