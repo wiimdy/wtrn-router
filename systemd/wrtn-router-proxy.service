@@ -5,7 +5,7 @@ After=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=%h/wtrn-router
-ExecStart=/usr/bin/node %h/wtrn-router/src/proxy.mjs
+ExecStart=%h/.nvm/versions/node/v20.20.2/bin/node %h/wtrn-router/src/proxy.mjs
 Restart=on-failure
 RestartSec=2
 

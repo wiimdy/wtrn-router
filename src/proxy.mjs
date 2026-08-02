@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 8788;
 const DEFAULT_UPSTREAM_ORIGIN = "https://api.wrtn.ax";
+const DEBUG_REQUEST_SIZES = process.env.WRTN_DEBUG_REQUEST_SIZES === "1";
 const ROUTES = new Map([
   ["/v1/chat/completions", "/api/v1/providers/chat/completion"],
   ["/v1/responses", "/api/v1/providers/responses"],
@@ -570,6 +571,14 @@ export function createProxyServer({
         body,
         duplex: "half",
       });
+
+      if (DEBUG_REQUEST_SIZES) {
+        console.info(JSON.stringify({
+          route: incomingUrl.pathname,
+          contentLength: request.headers["content-length"] ?? null,
+          upstreamStatus: upstream.status,
+        }));
+      }
 
       if (!upstream.body) {
         response.writeHead(upstream.status, responseHeaders(upstream.headers));
