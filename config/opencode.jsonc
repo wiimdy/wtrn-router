@@ -63,6 +63,22 @@
             "xhigh": { "reasoningEffort": "xhigh" }
           }
         },
+        "kimi-k3": {
+          "name": "Kimi K3 (Wrtn)",
+          "limit": {
+            "context": 1048576,
+            "output": 131072
+          }
+        },
+        // 문서상 context는 1,048,576이지만 1.5MB(~786k tokens) 요청부터 상류가
+        // 429를 반환한다(1MB까지는 정상). 재현되는 제약이라 500,000으로 제한한다.
+        "glm-5.2": {
+          "name": "GLM 5.2 (Wrtn)",
+          "limit": {
+            "context": 500000,
+            "output": 131072
+          }
+        },
         "gpt-4.1-mini": {
           "name": "GPT-4.1 Mini (Wrtn)",
           "limit": {
