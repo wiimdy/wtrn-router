@@ -42,6 +42,9 @@ API key: Wrtn API 키
 | `claude-sonnet-4-6` | 빠른 Opus 대안 | 1,000,000 | 128,000 |
 | `claude-haiku-4-5-20251001` | 빠르고 가벼운 작업 | 200,000 | 64,000 |
 | `gpt-5` | GPT 주력 | 400,000 | 128,000 |
+| `gpt-5.6-sol` | GPT 플래그십 | 1,050,000 | 128,000 |
+| `gpt-5.6-terra` | GPT 밸런스형 | 1,050,000 | 128,000 |
+| `gpt-5.6-luna` | GPT 저비용 | 1,050,000 | 128,000 |
 | `kimi-k3` | 오픈 모델 | 1,048,576 | 131,072 |
 | `glm-5.2` | 오픈 모델 | 500,000 | 131,072 |
 | `gpt-4.1-mini` | 가벼운 비-Claude 대안 | 1,047,576 | 32,768 |
@@ -50,9 +53,10 @@ API key: Wrtn API 키
 상류가 429를 반환해 500,000으로 제한했습니다.
 
 Claude Opus는 `low`, `medium`, `high`, `xhigh`, `max`를 제공합니다.
-Sonnet과 Haiku는 `low`부터 `xhigh`까지, GPT-5는 `none`부터 `xhigh`까지
-reasoning effort variant를 제공합니다. OpenCode의 variant 전환 키 또는
-`opencode run --variant max`처럼 선택할 수 있습니다.
+Sonnet과 Haiku는 `low`부터 `xhigh`까지, GPT-5는 `none`부터 `xhigh`까지,
+GPT-5.6 시리즈(Sol/Terra/Luna)는 `none`부터 `max`까지 reasoning effort variant를
+제공합니다. OpenCode의 variant 전환 키 또는 `opencode run --variant max`처럼
+선택할 수 있습니다.
 
 ## Codex SDK
 
