@@ -1,5 +1,7 @@
 import http from "node:http";
 import { randomUUID } from "node:crypto";
+import { setDefaultResultOrder } from "node:dns";
+import { setDefaultAutoSelectFamily } from "node:net";
 import { pathToFileURL } from "node:url";
 
 const DEFAULT_HOST = "127.0.0.1";
@@ -637,6 +639,15 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const port = parsePort(process.env.PORT);
   const upstreamOrigin =
     process.env.WRTN_UPSTREAM_ORIGIN ?? DEFAULT_UPSTREAM_ORIGIN;
+
+  // api.wrtn.ax publishes IPv6 addresses that are unreachable on some networks.
+  // Node's family autoselection can time out before falling back successfully,
+  // while a direct IPv4 connection works. Keep custom upstreams untouched.
+  if (new URL(upstreamOrigin).hostname === "api.wrtn.ax") {
+    setDefaultResultOrder("ipv4first");
+    setDefaultAutoSelectFamily(false);
+  }
+
   const server = createProxyServer({ upstreamOrigin });
 
   server.listen(port, host, () => {

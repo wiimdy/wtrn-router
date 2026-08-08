@@ -2,29 +2,53 @@
 
 OpenCode, Codex SDK, Claude Agent SDK를 Wrtn API에 연결하는 로컬 프록시입니다.
 
-## 1. 프록시 실행
+## Wrtn에서 GPT-5.6 Sol 직접 호출
+
+OpenCode 없이 Wrtn Responses API를 직접 호출할 수 있습니다.
+
+```bash
+export WRTN_API_KEY='your-api-key'
+
+curl https://api.wrtn.ax/api/v1/providers/responses \
+  -H "x-api-key: $WRTN_API_KEY" \
+  -H 'content-type: application/json' \
+  -d '{
+    "model": "gpt-5.6-sol",
+    "stream": false,
+    "input": "Reply with exactly OK.",
+    "max_output_tokens": 16
+  }'
+```
+
+Wrtn의 live model catalog에서 `gpt-5.6-sol`을 확인하려면:
+
+```bash
+curl https://api.wrtn.ax/api/v1/models/support
+```
+
+## 빠른 시작: OpenCode
+
+먼저 [OpenCode](https://opencode.ai/docs)를 설치하세요.
+
+```bash
+npm install -g opencode-ai
+```
 
 ```bash
 git clone git@github.com:wiimdy/wtrn-router.git
 cd wtrn-router
-npm start
+npm install && npm run opencode
 ```
 
-기본 주소는 `http://127.0.0.1:8788`입니다.
+이 명령은 기존 OpenCode 설정을 백업한 뒤 `wrtn-chat` provider를 병합하고,
+승인 질문을 끄는 `permission: "allow"`를 영구 적용하며, 프록시를 백그라운드로
+실행한 다음 OpenCode를 시작합니다. 기존의 다른 provider와 설정은 유지됩니다.
 
-## OpenCode
+> `permission: "allow"`는 셸 실행과 파일 수정도 묻지 않고 허용합니다. 신뢰할 수
+> 있는 프로젝트에서만 사용하세요.
 
-새 설정이라면:
-
-```bash
-mkdir -p ~/.config/opencode
-cp config/opencode.jsonc ~/.config/opencode/opencode.jsonc
-opencode
-```
-
-기존 설정이 있다면 [`config/opencode.jsonc`](config/opencode.jsonc)의 `provider.wrtn-chat`만 추가하세요.
-
-OpenCode에서 `/connect`를 실행한 뒤 `Other`를 선택하고 다음 값을 한 번 등록하세요.
+프록시 기본 주소는 `http://127.0.0.1:8788`입니다. 최초 한 번 OpenCode에서
+`/connect`를 실행한 뒤 `Other`를 선택하고 다음 값을 등록하세요.
 
 ```text
 Provider ID: wrtn-chat
@@ -58,6 +82,9 @@ GPT-5.6 시리즈(Sol/Terra/Luna)는 `none`부터 `max`까지 reasoning effort v
 제공합니다. OpenCode의 variant 전환 키 또는 `opencode run --variant max`처럼
 선택할 수 있습니다.
 
+`gpt-5.6-sol`은 function tool과 reasoning을 함께 사용할 수 있도록 OpenAI
+Responses API(`/v1/responses`)로 라우팅됩니다.
+
 ## Codex SDK
 
 ```bash
@@ -83,7 +110,42 @@ node examples/claude-agent-sdk.mjs
 표준 입력이 Claude Agent SDK의 Streaming Input으로 전달되며, 실행 중에는 같은 세션이 자동으로 유지됩니다.
 SDK는 OpenCode 인증 저장소를 읽지 않으므로 API 키를 별도로 전달해야 합니다.
 
-## 백그라운드 실행
+## 프록시 관리
+
+OpenCode 설정과 백그라운드 프록시만 준비하려면:
+
+```bash
+npm run setup
+```
+
+상태와 로그 확인:
+
+```bash
+curl -sS http://127.0.0.1:8788/health
+tail -f wrtn-router.log
+```
+
+온보딩 스크립트가 실행한 프록시 종료:
+
+```bash
+npm run stop
+```
+
+포그라운드에서 직접 실행하려면 `npm start`를 사용하세요.
+
+### Wrtn 403 문제
+
+Wrtn 호출이 `Forbidden`을 반환하면 먼저 상류 접근 여부를 확인하세요.
+
+```bash
+curl -I https://api.wrtn.ax/
+```
+
+여기서도 Cloudflare 403이 반환되면 모델 요청 본문을 처리하기 전에 현재 네트워크가
+차단된 상태입니다. Wrtn이 허용하는 네트워크에서 다시 시도하거나 Wrtn 지원팀에
+접근 허용을 요청하세요. 임의의 중계 서버로 보안 차단을 우회하지 마세요.
+
+## systemd 백그라운드 실행
 
 저장소가 `~/wtrn-router`에 있을 때:
 

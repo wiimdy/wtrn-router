@@ -9,6 +9,12 @@
   },
   "scripts": {
     "start": "node src/proxy.mjs",
+    "setup": "node scripts/setup-opencode.mjs",
+    "opencode": "npm run setup && opencode",
+    "stop": "node scripts/stop-proxy.mjs",
     "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.3.1"
   }
 }

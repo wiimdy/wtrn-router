@@ -4,3 +4,4 @@ dist/
 .omx/
 .omo/
 *.log
+.wrtn-router.pid
